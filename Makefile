@@ -19,6 +19,7 @@ options:
 
 config.h:
 	cp config.def.h $@
+	chmod 666 $@
 
 $(OBJ): arg.h config.h config.mk drw.h
 
