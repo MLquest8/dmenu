@@ -2,9 +2,9 @@
 
 cachedir=${XDG_CACHE_HOME:-"$HOME/.cache"}
 if [ -d "$cachedir" ]; then
-	historyfile=$cachedir/dmenu_todo
+	file=$cachedir/dmenu_todo
 else	# if no xdg dir, fall back to dotfiles in ~
-	historyfile=$HOME/.dmenu_todo
+	file=$HOME/.dmenu_todo
 fi
 
 touch "$file"
