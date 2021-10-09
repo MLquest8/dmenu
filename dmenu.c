@@ -24,6 +24,7 @@
                              * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
 #define LENGTH(X)             (sizeof X / sizeof X[0])
 #define TEXTW(X)              (drw_fontset_getwidth(drw, (X)) + lrpad)
+#define CMDSIZ                64
 
 /* enums */
 enum { SchemeNorm, SchemeSel, SchemeOut, SchemeLast }; /* color schemes */
@@ -35,6 +36,7 @@ struct item {
 };
 
 static char text[BUFSIZ] = "";
+static char prependedtext[BUFSIZ + CMDSIZ] = "";
 static char *embed;
 static int bh, mw, mh;
 static int inputw = 0, promptw, divider, prpcmdw;
@@ -420,10 +422,6 @@ keypress(XKeyEvent *ev)
 		case XK_k: ksym = XK_Prior; break;
 		case XK_l: ksym = XK_Down;  break;
 		case XK_KP_Enter:
-			cmdprepend = !cmdprepend;
-			calcwidths();
-			calcoffsets();
-			goto draw;
 			break;
 		default:
 			return;
@@ -508,10 +506,15 @@ insert:
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
+		if (ev->state & Mod1Mask) {
+			cmdprepend = !cmdprepend;
+			calcwidths();
+			calcoffsets();
+			goto draw;
+		}
 		if (cmdprepend) {
-			strcat(termcmd, " ");
-			strcat(termcmd, (sel && !(ev->state & ShiftMask)) ? sel->text : text);
-			puts(termcmd);
+			snprintf(prependedtext, BUFSIZ + CMDSIZ, "%s %s", termcmd, (sel && !(ev->state & ShiftMask)) ? sel->text : text);
+			puts(prependedtext);
 		} else
 			puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
 		if (!(ev->state & ControlMask)) {
@@ -792,7 +795,7 @@ main(int argc, char *argv[])
 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
 			embed = argv[++i];
 		else if (!strcmp(argv[i], "--cmd")) /* terminal to prepend the match with */
-			termcmd = argv[++i];
+			strncpy(termcmd, argv[++i], CMDSIZ);
 		else
 			usage();
 

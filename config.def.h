@@ -8,7 +8,7 @@ static int rejectnomatch = 0;
  /* -p  option; prompt to the left of input field */
 static char *prompt      = NULL;
  /* --cmd option; prepends the match with "termcmd" */
-static char *termcmd     = "st -e";
+static char termcmd[CMDSIZ]  = "st -e";
 static int cmdprepend    = 0; /* if 0, "termcmd" won't be prepend the match by default; alt+enter to toggle */
 /* -fn option overrides fonts[0]; default X11 font or font set */
 static const char *fonts[] = {
