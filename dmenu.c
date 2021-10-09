@@ -37,7 +37,7 @@ struct item {
 static char text[BUFSIZ] = "";
 static char *embed;
 static int bh, mw, mh;
-static int inputw = 0, promptw;
+static int inputw = 0, promptw, divider, prpcmdw;
 static int lrpad; /* sum of left and right padding */
 static size_t cursor;
 static struct item *items = NULL;
@@ -79,7 +79,7 @@ calcoffsets(void)
 	if (lines > 0)
 		n = lines * bh;
 	else
-		n = mw - (promptw + inputw + TEXTW("<") + TEXTW(">"));
+		n = mw - (promptw + divider + prpcmdw + inputw + TEXTW("<") + TEXTW(">"));
 	/* calculate which items will begin the next page and previous page */
 	for (i = 0, next = curr; next; next = next->right)
 		if ((i += (lines > 0) ? bh : MIN(TEXTW(next->text), n)) > n)
@@ -87,6 +87,13 @@ calcoffsets(void)
 	for (i = 0, prev = curr; prev && prev->left; prev = prev->left)
 		if ((i += (lines > 0) ? bh : MIN(TEXTW(prev->left->text), n)) > n)
 			break;
+}
+
+static void
+calcwidths(void) {
+	promptw = (prompt && *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
+	divider = (prompt && *prompt && cmdprepend) ? TEXTW("|") - lrpad / 4 : 0;
+	prpcmdw = cmdprepend ? TEXTW(termcmd) - lrpad / 4 : 0;
 }
 
 static void
@@ -139,6 +146,14 @@ drawmenu(void)
 	if (prompt && *prompt) {
 		drw_setscheme(drw, scheme[SchemeSel]);
 		x = drw_text(drw, x, 0, promptw, bh, lrpad / 2, prompt, 0);
+	}
+	if (prompt && *prompt && cmdprepend) {
+		drw_setscheme(drw, scheme[SchemeSel]);
+		x = drw_text(drw, x, 0, divider, bh, lrpad / 2, "|", 0);
+	}
+	if (cmdprepend) {
+		drw_setscheme(drw, scheme[SchemeSel]);
+		x = drw_text(drw, x, 0, prpcmdw, bh, lrpad / 2, termcmd, 0);
 	}
 	/* draw input field */
 	w = (lines > 0 || !matches) ? mw - x : inputw;
@@ -269,12 +284,26 @@ insert(const char *str, ssize_t n)
 {
 	if (strlen(text) + n > sizeof text - 1)
 		return;
+
+	static char last[BUFSIZ] = "";
+	if(rejectnomatch) {
+		/* store last text value in case we need to revert it */
+		memcpy(last, text, BUFSIZ);
+	}	
+
 	/* move existing text out of the way, insert new text, and update cursor */
 	memmove(&text[cursor + n], &text[cursor], sizeof text - cursor - MAX(n, 0));
 	if (n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
 	match();
+
+	if(!matches && rejectnomatch) {
+		/* revert to last text value if theres no match */
+		memcpy(text, last, BUFSIZ);
+		cursor -= n;
+		match();
+	}
 }
 
 static size_t
@@ -390,6 +419,12 @@ keypress(XKeyEvent *ev)
 		case XK_j: ksym = XK_Next;  break;
 		case XK_k: ksym = XK_Prior; break;
 		case XK_l: ksym = XK_Down;  break;
+		case XK_KP_Enter:
+			cmdprepend = !cmdprepend;
+			calcwidths();
+			calcoffsets();
+			goto draw;
+			break;
 		default:
 			return;
 		}
@@ -473,7 +508,12 @@ insert:
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-		puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
+		if (cmdprepend) {
+			strcat(termcmd, " ");
+			strcat(termcmd, (sel && !(ev->state & ShiftMask)) ? sel->text : text);
+			puts(termcmd);
+		} else
+			puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
 		if (!(ev->state & ControlMask)) {
 			cleanup();
 			exit(0);
@@ -663,7 +703,7 @@ setup(void)
 		y = topbar ? 0 : wa.height - mh;
 		mw = wa.width;
 	}
-	promptw = (prompt && *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
+	calcwidths();
 	inputw = MIN(inputw, mw/3);
 	match();
 
@@ -701,7 +741,7 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-bfiv] [-l lines] [-h height] [-p prompt] [-fn font] [-m monitor]\n"
+	fputs("usage: dmenu [-bfirv] [-l lines] [-h height] [-p prompt] [-fn font] [-m monitor]\n"
 	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
 	exit(1);
 }
@@ -724,6 +764,8 @@ main(int argc, char *argv[])
 		else if (!strcmp(argv[i], "-i")) { /* case-insensitive item matching */
 			fstrncmp = strncasecmp;
 			fstrstr = cistrstr;
+		} else if (!strcmp(argv[i], "-r")) { /* reject input which results in no match */
+			rejectnomatch = 1;
 		} else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
@@ -749,6 +791,8 @@ main(int argc, char *argv[])
 			colors[SchemeSel][ColFg] = argv[++i];
 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
 			embed = argv[++i];
+		else if (!strcmp(argv[i], "--cmd")) /* terminal to prepend the match with */
+			termcmd = argv[++i];
 		else
 			usage();
 
