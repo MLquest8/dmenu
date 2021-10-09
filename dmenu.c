@@ -506,7 +506,7 @@ insert:
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-		if (ev->state & Mod1Mask) {
+		if (ev->state & Mod4Mask) {
 			cmdprepend = !cmdprepend;
 			calcwidths();
 			calcoffsets();
